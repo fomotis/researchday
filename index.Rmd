@@ -1,0 +1,580 @@
+---
+title: "Incorporating Trait Information in Population Growth Models: a Lotka-Volterra
+  example"
+subtitle: ""
+author: "Olusoji Oluwafemi Daniel, Thomas Neyens, Marc Aerts, Frederik De Laender"
+institute: "Center for Statistics, Data Science Institute, Hasselt University, Hasselt, 3500, Belgium.<br>Research Unit in Environmental and Evolutionary Biology (URBE), Institute of Life-Earth-Environment (ILEE), Namur Institute for Complex Systems (NAXYS), Universit'e de Namur, Namur, 5020, Belgium."
+date: "16/10/2020 (updated: `r Sys.Date()`)"
+output:
+  xaringan::moon_reader:
+    css: xaringan-themer.css
+    lib_dir: libs
+    seal: false
+    nature:
+      beforeInit: "cols_macro.js"
+      highlightStyle: github
+      highlightLines: true
+      countIncrementalSlides: false
+---
+
+```{r setup, include=FALSE}
+options(htmltools.dir.version = FALSE)
+```
+
+```{r xaringan-themer, include=FALSE, warning=FALSE}
+library(xaringanthemer)
+style_mono_accent(
+  base_color = "#272822",
+  white_color = "#FFFFFF",
+  black_color = "#272822",
+  header_font_google = google_font("Josefin Sans"),
+  #text_font_google   = google_font("Open Sans", "300", "300i"),
+  code_font_google   = google_font("Fira Mono"),
+  text_font_base = "Open Sans",
+  link_color = '#88398a',
+  inverse_background_color = "#FFFFFF",
+  inverse_text_color = "#272822",
+  inverse_header_color = "#272822",
+  title_slide_text_color = "#272822",
+  title_slide_background_color = "#FFFFFF",
+)
+```
+
+```{r echo=FALSE,include=FALSE, warning=FALSE}
+library(knitr)
+library(ggpubr)
+library(tidyverse)
+library(grid)
+library(png)
+library(gridExtra)
+library(knitr)
+library(deSolve)
+library(kableExtra)
+options(knitr.table.format = "html")
+
+comb2pngs2 <- function(imgs, bottom_text = NULL){
+  img1 <-  grid::rasterGrob(as.raster(readPNG(imgs[1])),
+                            interpolate = FALSE)
+  img2 <-  grid::rasterGrob(as.raster(readPNG(imgs[2])),
+                            interpolate = FALSE)
+  grid.arrange(img1, img2, ncol = 2, bottom = bottom_text)
+}
+
+im1 <- "Pics/moths.jpg"
+im2 <- "Pics/example1.png"
+im3 <- "Pics/EcologicalPerspective.PNG"
+im4 <- "Pics/StatisticalPerspective.PNG"
+im5 <- "Pics/Environment.PNG"
+im6 <- "Pics/Literature.PNG"
+im7 <- "pics/monoculture_experiment.PNG"
+im8 <- "Pics/biculture_experiment.PNG"
+im9 <- "Pics/All_traits_N02.png"
+im10 <- "Pics/All_traits_r2.png"
+im11 <- "Pics/All_traits_alpha1122.png"
+im12 <- "Pics/All_traits_alpha12_all.png"
+im12b <- "Pics/All_traits_alpha12_18.png"
+im12c <- "Pics/All_traits_alpha12_20.png"
+im12d <- "Pics/All_traits_alpha12_22.png"
+im13 <- "Pics/Both_LVE_r2.png"
+im14 <- "Pics/All_traits_alpha1221_Mean.png"
+im15 <- "Pics/All_traits_w.png"
+im16 <- "Pics/All_b4_preds.png"
+im17 <- "Pics/All_b5_preds.png"
+im18 <- "Pics/b4_pred_barabas.png"
+im19 <- "Pics/b5_pred_barabas.png"
+
+combined_data <- read.csv("Data/combined_data.csv", header = T, na.strings = ".", 
+                          stringsAsFactors = FALSE )
+biculture_data <- combined_data %>% 
+  dplyr::filter(Experiment == "BI" & Time > 1) %>% 
+  mutate(Temperature = factor(Temperature), 
+         Temperature2 = case_when( 
+           
+           Temperature == 18 ~ 1,
+           Temperature == 20 ~ 2,
+           Temperature == 22 ~ 3
+           
+         )
+         
+  ) 
+
+biculture_data <- biculture_data[order(biculture_data$Sample.ID2, biculture_data$Time), ]
+```
+
+class: inverse, center
+
+<div style="text-align: left">
+<img style="float: center; margin: 0px 15px 15px 0px;" src="Pics/DSI-logo.png" width="80" height="80"/>
+</div>
+
+
+## Incorporating Trait Information in Population Growth Models: a Lotka-Volterra example
+
+#### HTML Slides: https://fomotis.github.io/researchday/
+
+<div style="text-align: right">
+<img style="float: center; margin: 0px 15px 15px 0px;" src="Pics/ilee.jpg" width="120" height="120"/>
+</div>
+
+
+---
+
+class: center, middle
+
+#  Introduction
+
+---
+
+# Traits and its Importance
+
+* Traits are simply put characteristics (genetic and/or phenotypic) of a species.
+
+* Traits can influence the survival of a species.
+
+```{r, echo=FALSE, out.width = "40%", out.height = "40%", fig.align='center', fig.cap='Peppered moths survival during the industrial evolution in Britain.'}
+include_graphics(im1)
+```
+
+* Could fetch you an article in [BBC](https://www.bbc.com/news/science-environment-36424768) and [New York Times](https://www.nytimes.com/2016/06/02/science/moths-butterflies-dna-cortex-genes.html).
+
+---
+
+# Traits (Cont.)
+
+* Traits are measured per individual for each species. Thus,
+
+$$M = \left(\begin{array}{ccc} b_{11} & \cdots & b_{1m}\\ \vdots & \vdots & \vdots \\ b_{n1} & \cdots & b_{nm}  \end{array}\right)$$
+
+* Longitudinal measurements are also possible. This is especially done if evolution is of interest.
+
+---
+
+# Characterising Population Growth (Lotka-Volterra Model)
+
+\begin{equation}
+\frac{dN}{dt} = diag(N) (R - AN)
+\end{equation}
+
+* **Two Species Case**
+
+\begin{equation}
+\left(\begin{array}{c}\frac{d N_1}{d t} \\  \frac{d N_2}{d t} \end{array} \right) = \left(\begin{array}{c} N_1 \\ N_2
+\end{array} \right) \left[ \left( \begin{array}{c} r_1 \\ r_2 \end{array} \right) - \left( \begin{array}{cc} \alpha_{11} & \alpha_{12} \\ \alpha_{21} & \alpha_{22} \end{array} \right)\left( \begin{array}{c} N_{1} \\ N_{2} \end{array} \right) \right] 
+\end{equation}
+
+.pull-left[
+* R is a vector of $r$'s growth rates.
+* $A$ is a matrix of $\alpha's$
+  - $\alpha_{ij}, i = j$ are intraspecific interaction/competition.
+  - $\alpha_{ij}, i \neq j$ are interspecific interaction/competition.
+]
+
+.pull-right[
+```{r, echo=FALSE, out.width = "60%", out.height = "60%", fig.align='center', fig.cap=''}
+biLVE <- function(t,  N, parms) {
+  
+  with(as.list(c(parms, N)), {
+    
+    dNdt1 =  N[1] * (r1 - (alpha11*N[1] + alpha12*N[2]) )
+    dNdt2 =  N[2] * (r2 - (alpha21*N[1] + alpha22*N[2]) )
+    res <- c(dNdt1, dNdt2)
+    list(res)
+    
+  })
+  
+}
+N0 <- c(5.15, 8.2)
+r1 <- 0.35; r2 <- 0.40
+alpha11 <- 0.05; alpha22 <- 0.03
+alpha12 <- 0.0015; alpha21 <- 0.002
+ts <- seq(1, 50, length.out = 30)
+out <- ode(y = N0, func = biLVE, times = ts, 
+           parms = c(r1 = r1, r2 = r2, 
+                         alpha11 = alpha11, 
+                         alpha12 = alpha12, 
+                         alpha21 = alpha21, 
+                         alpha22 = alpha22))
+colnames(out) <- c('Time', 'S1', 'S2')
+
+p1 <- out %>% as.data.frame() %>% 
+  pivot_longer(cols = c('S1', 'S2'), 
+               names_to = 'Species', 
+               values_to = 'Density') %>%
+  ggplot(aes(x = Time, y = Density, 
+             color = Species, 
+             group = Species)) + 
+  geom_point(size = 4) +
+  geom_line() +
+  theme_bw() + 
+  color_palette("Dark2") +
+  scale_x_continuous(breaks = seq(0, 50, by = 4)) +
+  scale_y_continuous(breaks = seq(0, 14, by = 1)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 0.9, vjust = 0.5), 
+        legend.position = "top") +
+  labs(x = "Time", y = "Density") +
+  ggtitle('Two Species Lotka-Volterra') +
+  theme_xaringan(background_color = "#FFFFFF") +
+  scale_xaringan_fill_discrete()
+p1
+#ggsave(plot = p1, filename = 'Pics/example1.png', 
+#       width = 5, height = 5)
+```
+]
+
+---
+class: center, middle
+
+#  Motivating the problem
+
+
+---
+
+# Ecological Questions of Interest
+
+* Broader Question: what role do traits play in biodiveristy dynamics?
+
+* Specific Question: what is the role of traits in **growth**, **competition** and co-existence of species?
+
+
+```{r, echo=FALSE, out.width = "60%", out.height = "60%", fig.align='center', fig.cap='Effects of Interest.'}
+include_graphics(im3)
+```
+
+---
+
+## The Modeling Challenge
+
+* Connecting a vector/matrix of trait values to density points such that the ecological questions are answered.
+
+```{r, echo=FALSE, out.width = "80%", out.height = "80%", fig.align='center', fig.cap=''}
+include_graphics(im4)
+```
+
+---
+
+## An Added Layer
+
+* What about environmental factors?
+
+```{r, echo=FALSE, out.width = "80%", out.height = "80%", fig.align='center', fig.cap='Possible Effects'}
+include_graphics(im5)
+```
+
+---
+
+class: center, middle
+
+#  Existing methods
+
+---
+
+## A Quick Literature Dive
+
+
+* The focus is on character displacement approach to trait based ecology.
+
+```{r, echo=FALSE, out.width = "80%", out.height = "80%", fig.align='center', fig.cap='Publication timeline for character displacement approach to trait based ecology'}
+include_graphics(im6)
+```
+
+
+---
+
+## Quantitative Genetic Lotka-Volterra (Barabas et al. 2015)
+
+* Let $T(t)$ be a trait vector measured at $t$, $T(t) \sim N(\mu(t), \sigma^2)$
+
+\begin{eqnarray}
+\frac{dN_i(t)}{dt} &=& N_i(t) \int r_i(N, p, z, t) p_i(z, t)dz \\
+r_i(N, p, z, t) &=& b(z) - \sum_{j = 1}^{S}N_j(t) \int a(z, z') p_j(z', t) dz'\\
+\frac{dN_i(t)}{dt} &=& N_i(t) \left(b_i(t) - \sum_{j = 1}^{S} \alpha_{ij}(t) N_j(t) \right)\\
+b_i(t) &=&  \int p_i(z, t)b(z) dz\\
+\alpha_{ij}(t) &=& \int\int p_i(z, t) a(z, z') p_j(z', t) dz' dz
+\end{eqnarray}
+
+* $a(z, z')$ and $b(z)$ are appropriately chosen functions to describe interaction and intrinsic growth rate.
+
+---
+
+## Interaction Kernel $a(z, z')$ and Growth Rate $b(z)$
+
+* If $a(z, z') = exp\left( - \frac{(z - z')^2}{\omega^2}\right)$ then,
+
+\begin{eqnarray}
+\alpha_{ij}(t) &=& \int\int p_i(z, t) a(z, z') p_j(z', t) dz' dz \\
+&=& \frac{w}{\sqrt{2\sigma^2_i + 2\sigma^2_j + w^2}} exp\left(-\frac{(\mu_{i}(t) - \mu_{j}(t))^2}{2\sigma^2_i + 2\sigma^2_j + w^2} \right)
+\end{eqnarray}
+
+* Note that, $\alpha_{ij} = \frac{w}{\sqrt{4\sigma^2_i + w^2}}$, when $i = j$
+
+* If $b(z) = r_i, -\infty < z < \infty$ then,
+
+$$b_i(t) = \int p_i(z, t)b(z) dz = r_i$$ 
+---
+
+## Quantitative Genetic Lotka-Volterra (Two Species)
+
+\begin{equation}
+\left(\begin{array}{c}\frac{d N_1}{d t} \\  \frac{d N_2}{d t} \end{array} \right) = \left(\begin{array}{c} N_1 \\ N_2
+\end{array} \right) \left[ \left( \begin{array}{c} r_1 \\ r_2 \end{array} \right) - \left( \begin{array}{cc}  \alpha_{11}&  \alpha_{12} \\ \alpha_{21}&  \alpha_{22} \end{array} \right)\left( \begin{array}{c} N_{1} \\ N_{2} \end{array} \right) \right] 
+\end{equation}
+
+* $\alpha_{11} = \frac{w}{\sqrt{4\sigma^2_1 + w^2}}$
+
+* $\alpha_{12} = \alpha_{21} = \frac{w}{\sqrt{2\sigma^2_1 + 2\sigma^2_2 + w^2}} exp\left(-\frac{(\mu_{1}(t) - \mu_{2}(t))^2}{2\sigma^2_1 + 2\sigma^2_2 + w^2} \right)$
+
+* $\alpha_{22} = \frac{w}{\sqrt{4\sigma^2_2 + w^2}}$
+
+---
+
+class: center, middle
+
+# Data and experiments
+
+---
+
+## Experiments
+
+```{r, echo=FALSE, out.width = "45%", out.height = "45%", fig.align='center', fig.cap='Monoculture Experiment'}
+include_graphics(im7)
+```
+
+
+
+```{r, echo=FALSE, out.width = "45%", out.height = "45%", fig.align='center', fig.cap='Biculture Experiment'}
+include_graphics(im8)
+```
+
+* Traits Investigated: *RED.B (Chlorophyll a)*, *YEL.B (Phycoerytherin)*, *FSC (Size)*
+
+---
+
+## Data
+
+.pull-left[
+```{r, echo=FALSE, out.width = "70%", out.height = "60%", fig.align='center', fig.width=5, fig.height=5}
+biculture_data %>% dplyr::filter( Time > 1) %>% 
+  ggplot(aes(x = Time, y = ldensity, group = interaction(Strain, Temperature, Replicate), 
+             color = Temperature)) + 
+  geom_point(size = 4) + 
+  geom_line(aes(linetype = Strain), size = 1.5) +
+  theme_bw() + 
+  color_palette("Dark2") +
+  scale_x_continuous(breaks = seq(0, 30, by = 4)) +
+  scale_y_continuous(breaks = seq(0, 14, by = 1)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 0.9, vjust = 0.5), 
+        legend.position = "top") +
+  labs(x = "Time", y = "Density")
+
+biculture_data %>% dplyr::filter( Time > 1) %>% 
+  ggplot(aes(x = Time, y = m_redbhlin, group = interaction(Strain, Temperature, Replicate), 
+             color = Temperature)) + 
+  geom_point(size = 4) + 
+  geom_line(aes(linetype = Strain), size = 1.5) +
+  theme_bw() + 
+  color_palette("Dark2") +
+  scale_x_continuous(breaks = seq(0, 30, by = 4)) +
+  scale_y_continuous(breaks = seq(0, 14, by = 1)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 0.9, vjust = 0.5), 
+        legend.position = "top") +
+  labs(x = "Time", y = "RED.B.HLin")
+
+```
+]
+
+.pull-right[
+```{r, echo=FALSE, out.width = "70%", out.height = "60%", fig.align='center', fig.width=5, fig.height=5}
+biculture_data %>% dplyr::filter( Time > 1) %>% 
+  ggplot(aes(x = Time, y = m_yelbhlin, group = interaction(Strain, Temperature, Replicate), 
+             color = Temperature)) + 
+  geom_point(size = 4) + 
+  geom_line(aes(linetype = Strain), size = 1.5) +
+  theme_bw() + 
+  color_palette("Dark2") +
+  scale_x_continuous(breaks = seq(0, 30, by = 4)) +
+  scale_y_continuous(breaks = seq(0, 14, by = 1)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 0.9, vjust = 0.5), 
+        legend.position = "top") +
+  labs(x = "Time", y = "YEL.B.HLin")
+
+biculture_data %>% dplyr::filter( Time > 1) %>% 
+  ggplot(aes(x = Time, y = m_fschlin, group = interaction(Strain, Temperature, Replicate), 
+             color = Temperature)) + 
+  geom_point(size = 4) + 
+  geom_line(aes(linetype = Strain), size = 1.5) +
+  theme_bw() + 
+  color_palette("Dark2") +
+  scale_x_continuous(breaks = seq(0, 30, by = 4)) +
+  scale_y_continuous(breaks = seq(0, 14, by = 1)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 0.9, vjust = 0.5), 
+        legend.position = "top") +
+  labs(x = "Time", y = "FSC.HLin")
+```
+]
+
+---
+
+## Fitting The Model
+
+\begin{equation}
+\left(\begin{array}{c}N_1 \\  N_2 \end{array} \right) \sim MVN\left( \int\left(\begin{array}{c}\frac{d N_1}{d t} \\  \frac{d N_2}{d t} \end{array} \right), \Sigma \right)
+\end{equation}
+
+* $\Sigma = \left( \begin{array}{cc} \sigma^2_1 & \rho\sigma_1\sigma_2 \\ \rho\sigma_1\sigma_2 & \sigma^2_2 \end{array} \right)$
+
+* $\hat{\alpha}_{12} = \frac{w}{\sqrt{2s^2_1 + 2s^2_2 + w^2}} exp\{-\frac{(\bar{z}_{i}(t) - \bar{z}_{j}(t))^2}{2s^2_1 + 2s^2_2 + w^2} \}$, thus $\hat{\alpha}_{ii} = \frac{w}{\sqrt{4s^2_i + w^2}}, i=1, 2$
+
+* $\bar{z}_{i}(t)$ is obtained by pooling $\frac{\sum^{n(t)}_{k=1} z_{ik}}{n(t)}$ across replicates
+
+* $s^2_1, s^2_j$ are obtained by pooling $\frac{\sum^{n(t)}_{k=1}(z_{ik} - \bar{z}_{i}(t))^2}{n(t) - 1}$ across replicates and $t$
+
+* For monoculture; $\hat{\alpha}_{12} = 0$, $\Sigma = \left( \begin{array}{cc} \sigma^2_1 & 0 \\ 0 & \sigma^2_2 \end{array} \right)$
+
+---
+
+## Fitting The Model (cont.)
+
+* **Normal-LVE** $\Rightarrow \alpha_{ij}$ are parameters.
+* **Symmetric-LVE** $\Rightarrow \alpha_{ij} = \alpha_{ji}, i \neq j$ 
+* **Barabas** $\Rightarrow \alpha_{ij} = \frac{w}{\sqrt{2s^2_1 + 2s^2_2 + w^2}} exp\{-\frac{(\bar{z}_{1}(t) - \bar{z}_{2}(t))^2}{2s^2_1 + 2s^2_2 + w^2} \}$ 
+
+* **Barabas (Permute)** $\Rightarrow \alpha_{ij}$ as in Barabas, but $\bar{z}_{i}(t) = \bar{z}_{i}(t') \ \ \ \forall \ \ \ t \neq t'$. Only for RED.B.HLin.
+
+---
+class: center, middle
+
+## Results
+
+---
+
+## Results $(N_0's)$
+
+```{r, echo=FALSE, out.width = "65%", out.height = "60%", fig.align='center'}
+include_graphics(im9)
+```
+---
+
+## Results $(r's)$
+
+```{r, echo=FALSE, out.width = "65%", out.height = "60%", fig.align='center'}
+include_graphics(im10)
+```
+
+---
+## Results $(w)$
+
+```{r, echo=FALSE, out.width = "65%", out.height = "60%", fig.align='center'}
+include_graphics(im15)
+```
+---
+
+## Results $(\alpha_{ij}, i = j)$
+
+```{r, echo=FALSE, out.width = "65%", out.height = "60%", fig.align='center'}
+include_graphics(im11)
+```
+
+---
+
+## Results $(\alpha_{ij}, i \neq j)$
+
+
+```{r, echo=FALSE, out.width = "90%", out.height = "80%", fig.align='center'}
+include_graphics(im12b)
+#comb2pngs2(c(im4, im14))
+```
+
+
+---
+
+## Results $(\alpha_{ij}, i \neq j)$
+
+```{r, echo=FALSE, out.width = "90%", out.height = "80%", fig.align='center'}
+include_graphics(im12c)
+#comb2pngs2(c(im4, im14))
+```
+
+
+---
+## Results $(\alpha_{ij}, i \neq j)$
+
+```{r, echo=FALSE, out.width = "90%", out.height = "80%", fig.align='center'}
+include_graphics(im12d)
+#comb2pngs2(c(im4, im14))
+```
+
+---
+## Results $(\alpha_{ij}, i \neq j)$
+
+```{r, echo=FALSE, out.width = "90%", out.height = "80%", fig.align='center'}
+include_graphics(im14)
+```
+
+---
+## Model Prediction (B4s)
+
+```{r, echo=FALSE, out.width = "70%", out.height = "70%", fig.align='center'}
+include_graphics(im16)
+#comb2pngs2(c(im8, im10))
+```
+---
+## Model Prediction (B5s)
+
+```{r, echo=FALSE, out.width = "90%", out.height = "70%", fig.align='center'}
+include_graphics(im17)
+#comb2pngs2(c(im9, im11))
+```
+
+---
+## Model Comparison (Model Posterior Probabilities)
+
+```{r, layout="l-body-outset", echo=FALSE, }
+dd <- data.frame(Temperature = rep(c(18, 20, 22), each =3),
+           Weights = rep(c('pbma', 'BB', 'stacking'), times = 3),
+           `Normal-LVE` = c(0.152, 0.175, 0.00, 0.009, 0.011, 0.000, 0.058, 0.050, 0.000),
+           `Symmetric-LVE` = c(0.165, 0.175, 0.000, 0.045, 0.048, 0.000, 0.079, 0.066, 0.000),
+           `Brabas(RED.B.HLin)` = c(0.666, 0.575, 0.864, 0.486, 0.374, 0.531, 0.618, 0.409, 0.418),
+           `Barabas(YEL.B.HLin)` = c(0.017, 0.018, 0.000, 0.170, 0.202, 0.054, 0.112, 0.154, 0.169),
+           `Barabas(FSC.HLin)` = c(0.000, 0.011, 0.000, 0.267, 0.321, 0.415, 0.131, 0.317, 0.413),
+           `Barabas(Permute)` = c(0.000, 0.046, 0.135, 0.023, 0.044, 0.000, 0.003, 0.005, 0.000)
+           )
+kbl(dd) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), 
+                full_width = F, position = "center",
+                font_size = 11) %>%
+  footnote(general = 'Model Posterior probabilities computed using different weights.\nBB=Bayesian Bootstrap\npbma=Pseudo Bayesian Model Averaging')
+```
+
+
+---
+
+## On-going work
+
+### Some Things to Consider
+
+* $b(z) = r_i, -\infty < z < \infty$ `r emo::ji("question")`
+
+* What about the uncertainty about $\frac{\sum^{n(t)}_{k=1} z_{ik}}{n(t)}$ `r emo::ji("question")`
+
+### Other Growth Functions
+
+* Uniform growth: $\begin{cases}b(z) = \gamma, \kappa < z < \kappa+2\gamma  \\ 0, \text{otherwise}\end{cases}$
+
+* Quadratic grwoth: $\begin{cases} \gamma^2 - (z - \kappa - \gamma)^2, \kappa < z < \kappa+2\gamma \\ 0, \text{otherwise}\end{cases}$
+
+* Triangular growth: $\begin{cases} \gamma - |z - \kappa - \gamma|, \kappa < z < \kappa+2\gamma \\ 0, \text{otherwise}\end{cases}$
+
+
+---
+class: center, middle
+
+##  Questions & Suggestions `r emo::ji("grinning")`
+
+
+
+
+
+
+
+
+
